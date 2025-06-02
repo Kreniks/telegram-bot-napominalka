@@ -1,5 +1,12 @@
 # Telegram-бот "Напоминалка"
 
+![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
+![Aiogram](https://img.shields.io/badge/aiogram-3.20.0-blue.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
+![Tests](https://img.shields.io/badge/tests-10%20passed-brightgreen.svg)
+![Status](https://img.shields.io/badge/status-ready%20to%20deploy-success.svg)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)
+
 Простой и эффективный Telegram-бот для установки напоминаний по времени.
 
 ## 📋 Описание
