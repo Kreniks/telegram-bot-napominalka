@@ -1,0 +1,128 @@
+# Docker Compose для разработки
+version: '3.8'
+
+services:
+  # Разработческая версия бота
+  telegram-bot-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder  # Используем builder stage для отладки
+    container_name: reminder-bot-dev
+    restart: "no"  # Не перезапускаем автоматически в dev режиме
+    
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - DB_PATH=/app/data/reminders.db
+      - LOG_LEVEL=DEBUG
+      - DEBUG_MODE=true
+      - TEST_MODE=true
+      - RUN_TESTS=true
+      - LOG_TO_STDOUT=true
+      - HEALTH_CHECK_ENABLED=true
+      - HEALTH_CHECK_PORT=8080
+    
+    # Монтируем исходный код для hot reload
+    volumes:
+      - .:/app
+      - dev_data:/app/data
+      - dev_logs:/app/logs
+    
+    ports:
+      - "8080:8080"
+      - "5678:5678"  # Порт для debugpy
+    
+    env_file:
+      - .env
+    
+    # Команда для разработки с возможностью отладки
+    command: >
+      sh -c "
+        echo 'Запуск в режиме разработки...' &&
+        python -m pip install debugpy &&
+        python -m debugpy --listen 0.0.0.0:5678 --wait-for-client main.py
+      "
+    
+    networks:
+      - dev_network
+
+  # Тестовый контейнер
+  telegram-bot-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: reminder-bot-test
+    restart: "no"
+    
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN:-test_token}
+      - DB_PATH=/app/data/test_reminders.db
+      - LOG_LEVEL=DEBUG
+      - TEST_MODE=true
+      - RUN_MODE=test
+    
+    volumes:
+      - test_data:/app/data
+      - test_logs:/app/logs
+    
+    command: python test_bot.py
+    
+    networks:
+      - dev_network
+
+  # Мониторинг контейнер
+  telegram-bot-monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: reminder-bot-monitor
+    restart: "no"
+    
+    environment:
+      - DB_PATH=/app/data/reminders.db
+      - LOG_LEVEL=INFO
+      - RUN_MODE=monitor
+    
+    volumes:
+      - dev_data:/app/data:ro  # Только чтение
+      - dev_logs:/app/logs:ro
+    
+    command: python monitor.py
+    
+    depends_on:
+      - telegram-bot-dev
+    
+    networks:
+      - dev_network
+
+  # Nginx для проксирования health check (опционально)
+  nginx-dev:
+    image: nginx:alpine
+    container_name: reminder-bot-nginx-dev
+    restart: "no"
+    
+    ports:
+      - "80:80"
+    
+    volumes:
+      - ./nginx.dev.conf:/etc/nginx/nginx.conf:ro
+    
+    depends_on:
+      - telegram-bot-dev
+    
+    networks:
+      - dev_network
+
+volumes:
+  dev_data:
+    driver: local
+  dev_logs:
+    driver: local
+  test_data:
+    driver: local
+  test_logs:
+    driver: local
+
+networks:
+  dev_network:
+    driver: bridge
