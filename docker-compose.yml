@@ -1,19 +1,20 @@
+# Docker Compose для Telegram-бота "Напоминалка" v2.0
 version: '3.8'
 
 services:
-  # Основной сервис бота
-  telegram-bot:
+  # Telegram-бот версии 2.0
+  telegram-bot-v2:
     build:
       context: .
       dockerfile: Dockerfile
       args:
         BUILD_DATE: ${BUILD_DATE:-}
         VCS_REF: ${VCS_REF:-}
-        VERSION: ${VERSION:-1.0.0}
-    container_name: reminder-bot
+        VERSION: ${VERSION:-2.0.0}
+    container_name: reminder-bot-v2
     restart: unless-stopped
-
-    # Переменные окружения
+    
+    # Переменные окружения для v2.0
     environment:
       - BOT_TOKEN=${BOT_TOKEN}
       - DB_PATH=/app/data/reminders.db
@@ -25,33 +26,44 @@ services:
       - NOTIFICATION_RETRY_ATTEMPTS=${NOTIFICATION_RETRY_ATTEMPTS:-3}
       - HEALTH_CHECK_ENABLED=${HEALTH_CHECK_ENABLED:-true}
       - HEALTH_CHECK_PORT=${HEALTH_CHECK_PORT:-8080}
-      - RUN_MODE=${RUN_MODE:-normal}
+      - RUN_MODE=${RUN_MODE:-v2}
       - CREATE_BACKUP=${CREATE_BACKUP:-false}
-      - LOG_TO_STDOUT=${LOG_TO_STDOUT:-false}
-      - BOT_SCRIPT=${BOT_SCRIPT:-main_v2.py}
-
+      - LOG_TO_STDOUT=${LOG_TO_STDOUT:-true}
+      - BOT_SCRIPT=main.py
+      - BOT_VERSION=2.0
+    
     # Тома для данных
     volumes:
-      - bot_data:/app/data
-      - bot_logs:/app/logs
-      - bot_backups:/app/backups
-
+      - bot_data_v2:/app/data
+      - bot_logs_v2:/app/logs
+      - bot_backups_v2:/app/backups
+    
     # Порты
     ports:
       - "${HEALTH_CHECK_PORT:-8080}:8080"
-
+    
     # Файл с переменными окружения
     env_file:
       - .env
-
+    
     # Проверка здоровья
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "python", "-c", "
+        import sys, os
+        sys.path.append('/app')
+        try:
+            from database_v2 import db_v2
+            db_v2.get_reminders_count(1)
+            print('Bot v2.0 is healthy')
+        except Exception as e:
+            print(f'Health check failed: {e}')
+            exit(1)
+      "]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
-
+    
     # Ограничения ресурсов
     deploy:
       resources:
@@ -61,87 +73,34 @@ services:
         reservations:
           memory: 128M
           cpus: '0.1'
-
+    
     # Сеть
     networks:
-      - bot_network
+      - bot_network_v2
+    
+    # Метки для идентификации
+    labels:
+      - "bot.version=2.0"
+      - "bot.features=multiple-reminders,buttons,extended-formats"
 
-  # Production версия с supervisor
-  telegram-bot-production:
-    build:
-      context: .
-      dockerfile: Dockerfile.production
-      args:
-        BUILD_DATE: ${BUILD_DATE:-}
-        VCS_REF: ${VCS_REF:-}
-        VERSION: ${VERSION:-1.0.0}
-    container_name: reminder-bot-production
-    restart: unless-stopped
-    profiles:
-      - production
-
-    environment:
-      - BOT_TOKEN=${BOT_TOKEN}
-      - DB_PATH=/app/data/reminders.db
-      - LOG_FILE=/app/logs/bot.log
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - LOG_MAX_SIZE_MB=${LOG_MAX_SIZE_MB:-50}
-      - LOG_BACKUP_COUNT=${LOG_BACKUP_COUNT:-10}
-      - CHECK_INTERVAL_SECONDS=${CHECK_INTERVAL_SECONDS:-60}
-      - NOTIFICATION_RETRY_ATTEMPTS=${NOTIFICATION_RETRY_ATTEMPTS:-3}
-      - HEALTH_CHECK_ENABLED=${HEALTH_CHECK_ENABLED:-true}
-      - HEALTH_CHECK_PORT=${HEALTH_CHECK_PORT:-8080}
-      - RUN_MODE=${RUN_MODE:-advanced}
-      - CREATE_BACKUP=${CREATE_BACKUP:-true}
-      - LOG_TO_STDOUT=${LOG_TO_STDOUT:-true}
-      - BOT_SCRIPT=${BOT_SCRIPT:-bot_advanced.py}
-
-    volumes:
-      - bot_data_prod:/app/data
-      - bot_logs_prod:/app/logs
-      - bot_backups_prod:/app/backups
-
-    ports:
-      - "${HEALTH_CHECK_PORT:-8080}:8080"
-
-    env_file:
-      - .env
-
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: '1.0'
-        reservations:
-          memory: 256M
-          cpus: '0.2'
-
-    networks:
-      - bot_network
-
-# Именованные тома для постоянного хранения данных
+# Именованные тома для v2.0
 volumes:
-  bot_data:
+  bot_data_v2:
     driver: local
-  bot_logs:
+    labels:
+      - "bot.version=2.0"
+  bot_logs_v2:
     driver: local
-  bot_backups:
+    labels:
+      - "bot.version=2.0"
+  bot_backups_v2:
     driver: local
-  bot_data_prod:
-    driver: local
-  bot_logs_prod:
-    driver: local
-  bot_backups_prod:
-    driver: local
+    labels:
+      - "bot.version=2.0"
 
-# Сеть для изоляции
+# Сеть для v2.0
 networks:
-  bot_network:
+  bot_network_v2:
     driver: bridge
+    labels:
+      - "bot.version=2.0"

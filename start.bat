@@ -74,10 +74,9 @@ echo.
 REM Остановка старых контейнеров
 echo 🛑 Остановка старых контейнеров...
 docker-compose down >nul 2>&1
-docker-compose -f docker-compose.v2.yml down >nul 2>&1
 
-echo 🔨 Сборка образа v2.0...
-docker-compose -f docker-compose.v2.yml build telegram-bot-v2
+echo 🔨 Сборка образа...
+docker-compose build telegram-bot-v2
 
 if errorlevel 1 (
     echo ❌ Ошибка сборки образа!
@@ -85,8 +84,8 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo 🚀 Запуск бота v2.0...
-docker-compose -f docker-compose.v2.yml up -d telegram-bot-v2
+echo 🚀 Запуск бота...
+docker-compose up -d telegram-bot-v2
 
 if errorlevel 1 (
     echo ❌ Ошибка запуска контейнера!
@@ -105,13 +104,13 @@ echo 📋 Попробуйте кнопку "Мои напоминания"
 echo 📅 Протестируйте новые форматы: 18:00, 18:00 12.06, 18:00 12.06.25
 echo.
 echo 📝 Полезные команды:
-echo   docker-compose -f docker-compose.v2.yml logs -f telegram-bot-v2  (логи)
-echo   docker-compose -f docker-compose.v2.yml down                     (остановка)
+echo   docker-compose logs -f telegram-bot-v2  (логи)
+echo   docker-compose down                     (остановка)
 echo.
 echo 🛑 Для остановки закройте это окно или нажмите Ctrl+C
 echo.
 
 REM Показываем логи
-echo 📋 Логи бота v2.0 (Ctrl+C для выхода):
+echo 📋 Логи бота (Ctrl+C для выхода):
 echo ========================================
-docker-compose -f docker-compose.v2.yml logs -f telegram-bot-v2
+docker-compose logs -f telegram-bot-v2

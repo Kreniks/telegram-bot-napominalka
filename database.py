@@ -1,5 +1,6 @@
 """
-Модуль для работы с базой данных напоминаний
+Обновленный модуль для работы с базой данных напоминаний (версия 2.0)
+Поддерживает множественные напоминания на пользователя
 """
 import sqlite3
 import logging
@@ -10,40 +11,56 @@ from config import DB_PATH, OMSK_TIMEZONE
 logger = logging.getLogger(__name__)
 
 
-class ReminderDatabase:
-    """Класс для работы с базой данных напоминаний"""
+class ReminderDatabaseV2:
+    """Класс для работы с базой данных напоминаний (версия 2.0)"""
     
     def __init__(self, db_path: str = DB_PATH):
         self.db_path = db_path
         self.init_database()
     
     def init_database(self):
-        """Инициализация базы данных"""
+        """Инициализация базы данных с новой структурой"""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
+                
+                # Создаем новую таблицу с поддержкой множественных напоминаний
                 cursor.execute('''
-                    CREATE TABLE IF NOT EXISTS reminders (
+                    CREATE TABLE IF NOT EXISTS reminders_v2 (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         user_id INTEGER NOT NULL,
                         reminder_time TEXT NOT NULL,
+                        reminder_text TEXT,
                         created_at TEXT NOT NULL,
-                        is_sent BOOLEAN DEFAULT FALSE
+                        is_sent BOOLEAN DEFAULT FALSE,
+                        UNIQUE(user_id, reminder_time)
                     )
                 ''')
+                
+                # Миграция данных из старой таблицы (если существует)
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='reminders'")
+                if cursor.fetchone():
+                    logger.info("Найдена старая таблица, выполняем миграцию...")
+                    cursor.execute('''
+                        INSERT OR IGNORE INTO reminders_v2 (user_id, reminder_time, created_at, is_sent)
+                        SELECT user_id, reminder_time, created_at, is_sent FROM reminders
+                    ''')
+                    logger.info("Миграция данных завершена")
+                
                 conn.commit()
-                logger.info("База данных инициализирована")
+                logger.info("База данных v2 инициализирована")
         except Exception as e:
             logger.error(f"Ошибка инициализации базы данных: {e}")
             raise
     
-    def add_reminder(self, user_id: int, reminder_time: datetime) -> bool:
+    def add_reminder(self, user_id: int, reminder_time: datetime, reminder_text: str = None) -> bool:
         """
-        Добавить напоминание для пользователя (заменяет старое)
+        Добавить напоминание для пользователя
         
         Args:
             user_id: ID пользователя Telegram
             reminder_time: Время напоминания в часовом поясе Омска
+            reminder_text: Дополнительный текст напоминания (опционально)
             
         Returns:
             bool: True если успешно добавлено
@@ -52,16 +69,14 @@ class ReminderDatabase:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 
-                # Удаляем старые напоминания пользователя
-                cursor.execute('DELETE FROM reminders WHERE user_id = ?', (user_id,))
-                
-                # Добавляем новое напоминание
+                # Добавляем новое напоминание (или заменяем существующее на то же время)
                 cursor.execute('''
-                    INSERT INTO reminders (user_id, reminder_time, created_at)
-                    VALUES (?, ?, ?)
+                    INSERT OR REPLACE INTO reminders_v2 (user_id, reminder_time, reminder_text, created_at)
+                    VALUES (?, ?, ?, ?)
                 ''', (
                     user_id,
                     reminder_time.isoformat(),
+                    reminder_text,
                     datetime.now(OMSK_TIMEZONE).isoformat()
                 ))
                 
@@ -73,12 +88,44 @@ class ReminderDatabase:
             logger.error(f"Ошибка добавления напоминания: {e}")
             return False
     
-    def get_due_reminders(self) -> List[Tuple[int, int, datetime]]:
+    def get_user_reminders(self, user_id: int) -> List[Tuple[int, datetime, str]]:
+        """
+        Получить все активные напоминания пользователя
+        
+        Args:
+            user_id: ID пользователя
+            
+        Returns:
+            List[Tuple[int, datetime, str]]: Список (id, reminder_time, reminder_text)
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    SELECT id, reminder_time, reminder_text
+                    FROM reminders_v2
+                    WHERE user_id = ? AND is_sent = FALSE
+                    ORDER BY reminder_time
+                ''', (user_id,))
+                
+                results = []
+                for row in cursor.fetchall():
+                    reminder_id, reminder_time_str, reminder_text = row
+                    reminder_time = datetime.fromisoformat(reminder_time_str)
+                    results.append((reminder_id, reminder_time, reminder_text or ""))
+                
+                return results
+                
+        except Exception as e:
+            logger.error(f"Ошибка получения напоминаний пользователя: {e}")
+            return []
+    
+    def get_due_reminders(self) -> List[Tuple[int, int, datetime, str]]:
         """
         Получить напоминания, которые нужно отправить
         
         Returns:
-            List[Tuple[int, int, datetime]]: Список (id, user_id, reminder_time)
+            List[Tuple[int, int, datetime, str]]: Список (id, user_id, reminder_time, reminder_text)
         """
         try:
             current_time = datetime.now(OMSK_TIMEZONE)
@@ -86,16 +133,16 @@ class ReminderDatabase:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute('''
-                    SELECT id, user_id, reminder_time
-                    FROM reminders
+                    SELECT id, user_id, reminder_time, reminder_text
+                    FROM reminders_v2
                     WHERE is_sent = FALSE AND reminder_time <= ?
                 ''', (current_time.isoformat(),))
                 
                 results = []
                 for row in cursor.fetchall():
-                    reminder_id, user_id, reminder_time_str = row
+                    reminder_id, user_id, reminder_time_str, reminder_text = row
                     reminder_time = datetime.fromisoformat(reminder_time_str)
-                    results.append((reminder_id, user_id, reminder_time))
+                    results.append((reminder_id, user_id, reminder_time, reminder_text or ""))
                 
                 return results
                 
@@ -117,7 +164,7 @@ class ReminderDatabase:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute('''
-                    UPDATE reminders 
+                    UPDATE reminders_v2 
                     SET is_sent = TRUE 
                     WHERE id = ?
                 ''', (reminder_id,))
@@ -130,33 +177,62 @@ class ReminderDatabase:
             logger.error(f"Ошибка обновления напоминания: {e}")
             return False
     
-    def get_user_reminder(self, user_id: int) -> Optional[datetime]:
+    def delete_reminder(self, reminder_id: int, user_id: int) -> bool:
         """
-        Получить активное напоминание пользователя
+        Удалить конкретное напоминание пользователя
         
         Args:
-            user_id: ID пользователя
+            reminder_id: ID напоминания
+            user_id: ID пользователя (для безопасности)
             
         Returns:
-            Optional[datetime]: Время напоминания или None
+            bool: True если успешно удалено
         """
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute('''
-                    SELECT reminder_time
-                    FROM reminders
+                    DELETE FROM reminders_v2 
+                    WHERE id = ? AND user_id = ?
+                ''', (reminder_id, user_id))
+                
+                deleted_count = cursor.rowcount
+                conn.commit()
+                
+                if deleted_count > 0:
+                    logger.info(f"Удалено напоминание {reminder_id} пользователя {user_id}")
+                    return True
+                else:
+                    logger.warning(f"Напоминание {reminder_id} не найдено для пользователя {user_id}")
+                    return False
+                
+        except Exception as e:
+            logger.error(f"Ошибка удаления напоминания: {e}")
+            return False
+    
+    def get_reminders_count(self, user_id: int) -> int:
+        """
+        Получить количество активных напоминаний пользователя
+        
+        Args:
+            user_id: ID пользователя
+            
+        Returns:
+            int: Количество активных напоминаний
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    SELECT COUNT(*) FROM reminders_v2
                     WHERE user_id = ? AND is_sent = FALSE
                 ''', (user_id,))
                 
-                result = cursor.fetchone()
-                if result:
-                    return datetime.fromisoformat(result[0])
-                return None
+                return cursor.fetchone()[0]
                 
         except Exception as e:
-            logger.error(f"Ошибка получения напоминания пользователя: {e}")
-            return None
+            logger.error(f"Ошибка подсчета напоминаний: {e}")
+            return 0
     
     def cleanup_old_reminders(self, days_old: int = 7):
         """
@@ -172,7 +248,7 @@ class ReminderDatabase:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute('''
-                    DELETE FROM reminders
+                    DELETE FROM reminders_v2
                     WHERE is_sent = TRUE AND created_at < ?
                 ''', (cutoff_time.isoformat(),))
                 
@@ -187,4 +263,5 @@ class ReminderDatabase:
 
 
 # Глобальный экземпляр базы данных
-db = ReminderDatabase()
+db_v2 = ReminderDatabaseV2()
+db = db_v2  # Алиас для совместимости

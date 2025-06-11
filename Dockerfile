@@ -72,4 +72,4 @@ VOLUME ["/app/data", "/app/logs"]
 EXPOSE 8080
 
 # Команда запуска (можно переопределить через переменную окружения)
-CMD ["sh", "-c", "python ${BOT_SCRIPT:-main_v2.py}"]
+CMD ["sh", "-c", "python ${BOT_SCRIPT:-main.py}"]
