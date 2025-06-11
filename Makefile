@@ -42,6 +42,12 @@ help:
 	@echo "  make prod-logs - Логи production"
 	@echo "  make prod-down - Остановить production"
 	@echo ""
+	@echo "$(GREEN)Версия 2.0:$(NC)"
+	@echo "  make v2        - Запустить бота v2.0"
+	@echo "  make v2-logs   - Логи v2.0"
+	@echo "  make v2-down   - Остановить v2.0"
+	@echo "  make v2-test   - Тесты v2.0"
+	@echo ""
 	@echo "$(GREEN)Мониторинг:$(NC)"
 	@echo "  make status    - Статус контейнеров"
 	@echo "  make health    - Проверка здоровья"
@@ -198,3 +204,64 @@ version:
 	@echo "Версия: $(VERSION)"
 	@echo "Build: $(BUILD_DATE)"
 	@echo "Git: $(VCS_REF)"
+
+# ============================================================================
+# КОМАНДЫ ДЛЯ ВЕРСИИ 2.0
+# ============================================================================
+
+# Запуск версии 2.0
+v2: check-env
+	@echo "$(BLUE)🚀 Запуск бота v2.0...$(NC)"
+	@echo "$(YELLOW)✨ Новые возможности:$(NC)"
+	@echo "$(YELLOW)  - Множественные напоминания$(NC)"
+	@echo "$(YELLOW)  - Кнопки управления$(NC)"
+	@echo "$(YELLOW)  - Расширенные форматы дат$(NC)"
+	docker-compose -f docker-compose.v2.yml up -d telegram-bot-v2
+	@echo "$(GREEN)✅ Бот v2.0 запущен$(NC)"
+	@echo "$(YELLOW)Проверьте статус: make v2-status$(NC)"
+	@echo "$(YELLOW)Логи: make v2-logs$(NC)"
+
+# Остановка версии 2.0
+v2-down:
+	@echo "$(BLUE)🛑 Остановка бота v2.0...$(NC)"
+	docker-compose -f docker-compose.v2.yml down
+	@echo "$(GREEN)✅ Бот v2.0 остановлен$(NC)"
+
+# Логи версии 2.0
+v2-logs:
+	docker-compose -f docker-compose.v2.yml logs -f telegram-bot-v2
+
+# Статус версии 2.0
+v2-status:
+	@echo "$(BLUE)📊 Статус бота v2.0:$(NC)"
+	@docker ps --filter "name=reminder-bot-v2" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+# Тесты версии 2.0
+v2-test: check-env
+	@echo "$(BLUE)🧪 Запуск тестов v2.0...$(NC)"
+	docker-compose -f docker-compose.v2.yml run --rm telegram-bot-v2 python test_bot_v2.py
+	@echo "$(GREEN)✅ Тесты v2.0 завершены$(NC)"
+
+# Пересборка и перезапуск v2.0
+v2-rebuild: v2-down
+	@echo "$(BLUE)🔨 Пересборка бота v2.0...$(NC)"
+	docker-compose -f docker-compose.v2.yml build --no-cache telegram-bot-v2
+	@echo "$(BLUE)🚀 Запуск обновленного бота v2.0...$(NC)"
+	docker-compose -f docker-compose.v2.yml up -d telegram-bot-v2
+	@echo "$(GREEN)✅ Бот v2.0 пересобран и запущен$(NC)"
+
+# Вход в контейнер v2.0
+v2-shell:
+	@echo "$(BLUE)🐚 Вход в контейнер v2.0...$(NC)"
+	docker exec -it reminder-bot-v2 /bin/bash
+
+# Health check для v2.0
+v2-health:
+	@echo "$(BLUE)🏥 Проверка здоровья v2.0...$(NC)"
+	@curl -s http://localhost:8080/health | python -m json.tool || echo "$(RED)❌ Health check недоступен$(NC)"
+
+# Очистка v2.0
+v2-clean:
+	@echo "$(BLUE)🧹 Очистка v2.0...$(NC)"
+	docker-compose -f docker-compose.v2.yml down -v --rmi all --remove-orphans
+	@echo "$(GREEN)✅ Очистка v2.0 завершена$(NC)"

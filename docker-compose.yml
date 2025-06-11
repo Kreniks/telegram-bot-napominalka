@@ -28,6 +28,7 @@ services:
       - RUN_MODE=${RUN_MODE:-normal}
       - CREATE_BACKUP=${CREATE_BACKUP:-false}
       - LOG_TO_STDOUT=${LOG_TO_STDOUT:-false}
+      - BOT_SCRIPT=${BOT_SCRIPT:-main_v2.py}
 
     # Тома для данных
     volumes:

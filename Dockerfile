@@ -71,5 +71,5 @@ VOLUME ["/app/data", "/app/logs"]
 # Порт для health check (если включен)
 EXPOSE 8080
 
-# Команда запуска (можно переопределить)
-CMD ["python", "main.py"]
+# Команда запуска (можно переопределить через переменную окружения)
+CMD ["sh", "-c", "python ${BOT_SCRIPT:-main_v2.py}"]
