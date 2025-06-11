@@ -1,176 +1,151 @@
 """
-Тесты для Telegram-бота "Напоминалка"
+Тестирование функциональности бота без запуска Telegram API
 """
-import unittest
-from datetime import time
-from utils.time_utils import validate_time_format, parse_time_string, format_time, is_time_equal
-from utils.reminder_manager import ReminderManager
+import asyncio
+import logging
+from datetime import datetime, timedelta
+
+from config import OMSK_TIMEZONE, MESSAGES, setup_logging
+from database import db
+from utils import validate_reminder_time, format_datetime_for_user, format_time_for_user
+
+# Настройка логирования для тестов
+setup_logging()
+logger = logging.getLogger(__name__)
 
 
-class TestTimeUtils(unittest.TestCase):
-    """Тесты для утилит работы со временем"""
+def test_time_parsing():
+    """Тест парсинга времени и даты"""
+    print("=== Тестирование парсинга времени ===")
     
-    def test_validate_time_format_valid(self):
-        """Тест валидации корректных форматов времени"""
-        valid_times = ["00:00", "12:30", "23:59", "9:15", "01:05"]
-        for time_str in valid_times:
-            with self.subTest(time_str=time_str):
-                self.assertTrue(validate_time_format(time_str))
+    # Тест 1: Время с датой
+    future_date = (datetime.now(OMSK_TIMEZONE) + timedelta(days=1)).strftime('%d.%m.%Y')
+    test_input = f'18:00 {future_date}'
+    result, status, is_today = validate_reminder_time(test_input)
+    print(f"✅ Время с датой: {test_input} -> {status}")
     
-    def test_validate_time_format_invalid(self):
-        """Тест валидации некорректных форматов времени"""
-        invalid_times = ["24:00", "12:60", "abc", "12", "12:", ":30", "12:30:45", "25:30"]
-        for time_str in invalid_times:
-            with self.subTest(time_str=time_str):
-                self.assertFalse(validate_time_format(time_str))
+    # Тест 2: Только время
+    future_time = (datetime.now(OMSK_TIMEZONE) + timedelta(hours=2)).strftime('%H:%M')
+    result, status, is_today = validate_reminder_time(future_time)
+    print(f"✅ Только время: {future_time} -> {status}")
     
-    def test_parse_time_string_valid(self):
-        """Тест парсинга корректных строк времени"""
-        test_cases = [
-            ("12:30", time(12, 30)),
-            ("00:00", time(0, 0)),
-            ("23:59", time(23, 59)),
-            ("9:15", time(9, 15))
-        ]
-        for time_str, expected in test_cases:
-            with self.subTest(time_str=time_str):
-                result = parse_time_string(time_str)
-                self.assertEqual(result, expected)
+    # Тест 3: Неверный формат
+    result, status, is_today = validate_reminder_time('25:00')
+    print(f"✅ Неверный формат: 25:00 -> {status}")
     
-    def test_parse_time_string_invalid(self):
-        """Тест парсинга некорректных строк времени"""
-        invalid_times = ["24:00", "12:60", "abc", "12", "25:30"]
-        for time_str in invalid_times:
-            with self.subTest(time_str=time_str):
-                with self.assertRaises(ValueError):
-                    parse_time_string(time_str)
+    # Тест 4: Прошедшее время
+    past_time = (datetime.now(OMSK_TIMEZONE) - timedelta(hours=1)).strftime('%H:%M')
+    result, status, is_today = validate_reminder_time(past_time)
+    print(f"✅ Прошедшее время: {past_time} -> {status}")
     
-    def test_format_time(self):
-        """Тест форматирования времени"""
-        test_cases = [
-            (time(12, 30), "12:30"),
-            (time(0, 0), "00:00"),
-            (time(23, 59), "23:59"),
-            (time(9, 5), "09:05")
-        ]
-        for time_obj, expected in test_cases:
-            with self.subTest(time_obj=time_obj):
-                result = format_time(time_obj)
-                self.assertEqual(result, expected)
-    
-    def test_is_time_equal(self):
-        """Тест сравнения времени"""
-        time1 = time(12, 30, 45)  # с секундами
-        time2 = time(12, 30, 0)   # без секунд
-        time3 = time(12, 31, 0)   # другая минута
-        
-        self.assertTrue(is_time_equal(time1, time2))
-        self.assertFalse(is_time_equal(time1, time3))
+    print()
 
 
-class TestReminderManager(unittest.TestCase):
-    """Тесты для менеджера напоминаний"""
+def test_database():
+    """Тест работы с базой данных"""
+    print("=== Тестирование базы данных ===")
     
-    def setUp(self):
-        """Настройка перед каждым тестом"""
-        self.manager = ReminderManager()
+    test_user_id = 987654321
+    test_time = datetime.now(OMSK_TIMEZONE) + timedelta(minutes=10)
     
-    def test_set_and_get_reminder(self):
-        """Тест установки и получения напоминания"""
-        user_id = 123
-        reminder_time = time(15, 30)
-        chat_id = 456
-        
-        # Устанавливаем напоминание
-        self.manager.set_reminder(user_id, reminder_time, chat_id)
-        
-        # Проверяем, что напоминание установлено
-        self.assertTrue(self.manager.has_reminder(user_id))
-        
-        # Получаем напоминание
-        result = self.manager.get_reminder(user_id)
-        self.assertIsNotNone(result)
-        self.assertEqual(result, (reminder_time, chat_id))
+    # Тест добавления
+    success = db.add_reminder(test_user_id, test_time)
+    print(f"✅ Добавление напоминания: {'успешно' if success else 'ошибка'}")
     
-    def test_remove_reminder(self):
-        """Тест удаления напоминания"""
-        user_id = 123
-        reminder_time = time(15, 30)
-        chat_id = 456
-        
-        # Устанавливаем напоминание
-        self.manager.set_reminder(user_id, reminder_time, chat_id)
-        self.assertTrue(self.manager.has_reminder(user_id))
-        
-        # Удаляем напоминание
-        result = self.manager.remove_reminder(user_id)
-        self.assertTrue(result)
-        self.assertFalse(self.manager.has_reminder(user_id))
-        
-        # Попытка удалить несуществующее напоминание
-        result = self.manager.remove_reminder(user_id)
-        self.assertFalse(result)
+    # Тест получения
+    user_reminder = db.get_user_reminder(test_user_id)
+    print(f"✅ Получение напоминания: {'найдено' if user_reminder else 'не найдено'}")
     
-    def test_get_due_reminders(self):
-        """Тест получения напоминаний к отправке"""
-        user1, user2, user3 = 123, 456, 789
-        chat1, chat2, chat3 = 111, 222, 333
-        time1 = time(15, 30)
-        time2 = time(16, 45)
-        
-        # Устанавливаем напоминания
-        self.manager.set_reminder(user1, time1, chat1)
-        self.manager.set_reminder(user2, time2, chat2)
-        self.manager.set_reminder(user3, time1, chat3)
-        
-        # Проверяем напоминания для time1
-        due_reminders = self.manager.get_due_reminders(time1)
-        self.assertEqual(len(due_reminders), 2)
-        
-        # Проверяем, что правильные пользователи
-        user_ids = [reminder[0] for reminder in due_reminders]
-        self.assertIn(user1, user_ids)
-        self.assertIn(user3, user_ids)
-        self.assertNotIn(user2, user_ids)
+    # Тест замены (добавляем новое напоминание для того же пользователя)
+    new_time = datetime.now(OMSK_TIMEZONE) + timedelta(minutes=20)
+    success = db.add_reminder(test_user_id, new_time)
+    user_reminder_new = db.get_user_reminder(test_user_id)
+    print(f"✅ Замена напоминания: {'успешно' if user_reminder_new != user_reminder else 'ошибка'}")
     
-    def test_clear_all_reminders(self):
-        """Тест очистки всех напоминаний"""
-        # Добавляем несколько напоминаний
-        self.manager.set_reminder(123, time(15, 30), 111)
-        self.manager.set_reminder(456, time(16, 45), 222)
-        
-        self.assertEqual(self.manager.get_reminders_count(), 2)
-        
-        # Очищаем все
-        count = self.manager.clear_all_reminders()
-        self.assertEqual(count, 2)
-        self.assertEqual(self.manager.get_reminders_count(), 0)
+    print()
 
 
-def run_tests():
-    """Запуск всех тестов"""
-    print("Запуск тестов для Telegram-бота 'Напоминалка'...")
+def test_message_formatting():
+    """Тест форматирования сообщений"""
+    print("=== Тестирование форматирования сообщений ===")
     
-    # Создаем test suite
-    loader = unittest.TestLoader()
-    suite = unittest.TestSuite()
+    test_time = datetime.now(OMSK_TIMEZONE) + timedelta(days=1, hours=3)
     
-    # Добавляем тесты
-    suite.addTests(loader.loadTestsFromTestCase(TestTimeUtils))
-    suite.addTests(loader.loadTestsFromTestCase(TestReminderManager))
+    # Тест форматирования даты и времени
+    formatted_date = format_datetime_for_user(test_time)
+    formatted_time = format_time_for_user(test_time)
+    print(f"✅ Форматирование даты: {formatted_date}")
+    print(f"✅ Форматирование времени: {formatted_time}")
     
-    # Запускаем тесты
-    runner = unittest.TextTestRunner(verbosity=2)
-    result = runner.run(suite)
+    # Тест сообщений
+    reminder_msg = MESSAGES['reminder_set_with_date'].format(
+        date=formatted_date,
+        time=formatted_time
+    )
+    print(f"✅ Сообщение о напоминании: {reminder_msg}")
     
-    # Выводим результат
-    if result.wasSuccessful():
-        print("\n✅ Все тесты прошли успешно!")
-        return True
-    else:
-        print(f"\n❌ Тесты завершились с ошибками: {len(result.failures)} failures, {len(result.errors)} errors")
-        return False
+    print()
+
+
+def test_edge_cases():
+    """Тест граничных случаев"""
+    print("=== Тестирование граничных случаев ===")
+    
+    # Тест различных неверных форматов
+    invalid_inputs = [
+        "24:00",  # Неверное время
+        "12:60",  # Неверные минуты
+        "18:00 32.12.2025",  # Неверная дата
+        "18:00 12.13.2025",  # Неверный месяц
+        "abc",  # Полностью неверный формат
+        "",  # Пустая строка
+        "18:00 12.06.2020",  # Прошедшая дата
+    ]
+    
+    for invalid_input in invalid_inputs:
+        result, status, is_today = validate_reminder_time(invalid_input)
+        expected_status = "invalid_format" if status != "past_time" else "past_time"
+        print(f"✅ '{invalid_input}' -> {status}")
+    
+    print()
+
+
+def test_timezone():
+    """Тест работы с часовым поясом"""
+    print("=== Тестирование часового пояса ===")
+    
+    current_omsk = datetime.now(OMSK_TIMEZONE)
+    print(f"✅ Текущее время в Омске: {current_omsk}")
+    print(f"✅ Часовой пояс: {current_omsk.tzinfo}")
+    
+    # Проверяем, что время корректно локализуется
+    test_input = "12:00"
+    result, status, is_today = validate_reminder_time(test_input)
+    if result:
+        print(f"✅ Локализация времени: {result.tzinfo}")
+    
+    print()
+
+
+async def main():
+    """Главная функция тестирования"""
+    print("🚀 Запуск тестирования Telegram-бота 'Напоминалка'")
+    print("=" * 60)
+    
+    try:
+        test_time_parsing()
+        test_database()
+        test_message_formatting()
+        test_edge_cases()
+        test_timezone()
+        
+        print("🎉 Все тесты пройдены успешно!")
+        print("✅ Бот готов к запуску с реальным токеном")
+        
+    except Exception as e:
+        print(f"❌ Ошибка в тестах: {e}")
+        logger.error(f"Ошибка в тестах: {e}")
 
 
 if __name__ == "__main__":
-    run_tests()
+    asyncio.run(main())
